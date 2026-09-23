@@ -627,9 +627,9 @@
     <!-- 5. JAVASCRIPT & FIREBASE LOGIC -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        // Firebase Setup
+        // Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyDrGW3yA8hJiYSABlSedqji1JBJeHqJp0E",
             authDomain: "nutri-genie-95b2b.firebaseapp.com",
@@ -638,53 +638,46 @@
             messagingSenderId: "919311386719",
             appId: "1:919311386719:web:7fc8d04cd5b88a02e9b3ea"
         };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
 
-        // Gemini AI Setup
-        // KEEP THIS EMPTY -> Canvas auto-injects it at runtime!
-        const API_KEY = ""; 
+        // 🔒 SECURE LOCAL KEY MANAGER (Passes GitHub Checks!)
+        let API_KEY = localStorage.getItem("gemini_api_key") || "";
 
-        const state = {
-            currentLevel: "Beginner", currentGoal: "hypertrophy", currentDiet: "Omnivore",
-            isGeneratingWorkout: false, isGeneratingMeal: false, isGeneratingCoach: false
-        };
-
-        // --- AUTHENTICATION GLOBALS ---
-        window.handleEmailLogin = async function() {
-            const email = document.getElementById('auth-email').value;
-            const pass = document.getElementById('auth-password').value;
-            if(!email || !pass) return window.showToast("Enter email and password", "error");
-            
-            const btn = document.getElementById('email-login-btn');
-            const orig = btn.innerHTML;
-            btn.innerHTML = "Signing In...";
-            try {
-                const result = await signInWithEmailAndPassword(auth, email, pass);
-                window.enterApp(result.user.displayName || email.split('@')[0], result.user.email);
-                window.showToast("Signed in securely", "info");
-            } catch(e) {
-                window.showToast(e.message, "error");
-                btn.innerHTML = orig;
+        function requireApiKey() {
+            if (!API_KEY) {
+                const key = prompt("🔒 Secure AI Mode\n\nPlease enter your Gemini API Key.\n\nIt will be saved secretly on your phone so you never have to enter it again.");
+                if (key && key.trim() !== "") {
+                    API_KEY = key.trim();
+                    localStorage.setItem("gemini_api_key", API_KEY);
+                    window.showToast("API Key saved securely!", "info");
+                } else {
+                    window.showToast("An API key is required to use AI features.", "error");
+                    return null;
+                }
             }
+            return API_KEY;
+        }
+
+        window.clearApiKey = function() {
+            localStorage.removeItem("gemini_api_key");
+            API_KEY = "";
+            window.showToast("API Key removed from this device.", "info");
         };
 
-        window.handleEmailSignUp = async function() {
-            const email = document.getElementById('auth-email').value;
-            const pass = document.getElementById('auth-password').value;
-            if(!email || !pass) return window.showToast("Enter email and password", "error");
-            
-            const btn = document.getElementById('email-signup-btn');
-            const orig = btn.innerHTML;
-            btn.innerHTML = "Creating...";
-            try {
-                const result = await createUserWithEmailAndPassword(auth, email, pass);
-                window.enterApp(result.user.displayName || email.split('@')[0], result.user.email);
-                window.showToast("Account Created!", "info");
-            } catch(e) {
-                window.showToast(e.message, "error");
-                btn.innerHTML = orig;
+        // --- AUTH & UI MODAL LOGIC ---
+        window.bypassLogin = function(role) {
+            document.getElementById('auth-screen').style.display = 'none';
+            if(role === 'admin') {
+                document.getElementById('main-app').classList.add('hidden');
+                document.getElementById('admin-app').classList.remove('hidden');
+                document.getElementById('admin-app').style.display = 'flex';
+            } else {
+                document.getElementById('admin-app').classList.add('hidden');
+                document.getElementById('main-app').classList.remove('hidden');
+                document.getElementById('main-app').style.display = 'flex';
             }
         };
 
@@ -693,61 +686,100 @@
             btnText.innerHTML = "Connecting...";
             try {
                 const result = await signInWithPopup(auth, provider);
-                window.enterApp(result.user.displayName || "User", result.user.email);
-                window.showToast("Google Sign-In Success", "info");
-            } catch (error) {
-                if(error.code === 'auth/unauthorized-domain') {
-                    alert(`Firebase blocked login. Go to Firebase Console -> Authentication -> Settings -> Authorized Domains.\nAdd: ${window.location.hostname || "127.0.0.1"}`);
+                const user = result.user;
+                if(user.email === 'admin@nutrigenie.com') {
+                    window.bypassLogin('admin');
                 } else {
-                    window.showToast(error.message, "error");
+                    document.getElementById('user-name').innerText = user.displayName || "User";
+                    document.getElementById('user-avatar').innerText = (user.displayName ? user.displayName.substring(0,2).toUpperCase() : "US");
+                    window.bypassLogin('user');
                 }
+                window.showToast("Logged in successfully!", "info");
+            } catch (error) {
+                window.showToast(error.message, "error");
                 btnText.innerHTML = "Continue with Google";
             }
         };
 
-        window.bypassLogin = function(role) {
-            window.enterApp(role === 'admin' ? "Admin" : "Demo User", role === 'admin' ? "admin@nutrigenie.com" : "demo@user.com");
+        window.handleEmailSignUp = async function() {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            if(!email || !password) return window.showToast("Please enter email and password", "error");
+            
+            try {
+                const result = await createUserWithEmailAndPassword(auth, email, password);
+                document.getElementById('user-name').innerText = email.split('@')[0];
+                document.getElementById('user-avatar').innerText = email.substring(0,2).toUpperCase();
+                window.bypassLogin('user');
+                window.showToast("Account created successfully!", "info");
+            } catch(error) {
+                window.showToast(error.message, "error");
+            }
+        };
+
+        window.handleEmailLogin = async function() {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            if(!email || !password) return window.showToast("Please enter email and password", "error");
+            
+            try {
+                const result = await signInWithEmailAndPassword(auth, email, password);
+                if(email === 'admin@nutrigenie.com') {
+                    window.bypassLogin('admin');
+                } else {
+                    document.getElementById('user-name').innerText = email.split('@')[0];
+                    document.getElementById('user-avatar').innerText = email.substring(0,2).toUpperCase();
+                    window.bypassLogin('user');
+                }
+                window.showToast("Welcome back!", "info");
+            } catch(error) {
+                window.showToast(error.message, "error");
+            }
         };
 
         window.handleLogout = async function() {
             try {
-                if (auth.currentUser) {
-                    await signOut(auth);
-                }
-                // Hide main apps
+                await signOut(auth);
                 document.getElementById('main-app').style.display = 'none';
-                document.getElementById('main-app').classList.add('hidden');
                 document.getElementById('admin-app').style.display = 'none';
-                document.getElementById('admin-app').classList.add('hidden');
-                
-                // Show Auth Screen
                 document.getElementById('auth-screen').style.display = 'flex';
-                
-                // Clear inputs
-                document.getElementById('auth-email').value = '';
-                document.getElementById('auth-password').value = '';
-                
                 window.showToast("Logged out successfully", "info");
             } catch (error) {
-                console.error("Logout Error:", error);
-                window.showToast("Error logging out.", "error");
+                window.showToast(error.message, "error");
             }
         };
 
-        window.enterApp = function(name, email = "") {
-            document.getElementById('auth-screen').style.display = 'none';
-            if(email === 'admin@nutrigenie.com') {
-                document.getElementById('admin-app').style.display = 'flex';
-                document.getElementById('admin-app').classList.remove('hidden');
-            } else {
-                document.getElementById('main-app').style.display = 'flex';
-                document.getElementById('main-app').classList.remove('hidden');
-                document.getElementById('user-name').innerText = name;
-                document.getElementById('user-avatar').innerText = name.substring(0,2).toUpperCase();
-            }
+        window.openHealthSync = function() {
+            const modal = document.getElementById('health-sheet');
+            modal.style.display = 'flex';
+            modal.classList.remove('hidden');
         };
 
-        // --- UI NAVIGATION & MODALS ---
+        window.forceCloseModal = function() {
+            const modal = document.getElementById('health-sheet');
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        };
+
+        window.connectHealthApp = function(btn) {
+            btn.innerHTML = 'Connected';
+            btn.className = 'px-5 py-2.5 rounded-xl bg-green-500/20 text-green-500 text-xs font-bold uppercase tracking-wider cursor-default border border-green-500/30';
+            btn.onclick = null;
+        };
+
+        // --- Application State ---
+        const state = {
+            currentLevel: "Beginner",
+            currentGoal: "hypertrophy",
+            currentDiet: "Omnivore",
+            isGeneratingWorkout: false,
+            isGeneratingMeal: false,
+            isGeneratingCoach: false
+        };
+
+        // --- Navigation Logic ---
+        const navBtns = document.querySelectorAll('.nav-btn');
+        const indicator = document.getElementById('nav-indicator');
         const views = {
             home: document.getElementById('view-home'),
             workout: document.getElementById('view-workout'),
@@ -755,91 +787,77 @@
             coach: document.getElementById('view-coach')
         };
         const mainScroll = document.getElementById('main-scroll');
-        const indicator = document.getElementById('nav-indicator');
 
-        window.switchTab = function(targetId, index) {
-            const navBtns = document.querySelectorAll('.nav-btn');
-            const positions = ['12.5%', '37.5%', '62.5%', '87.5%'];
-            
-            indicator.style.left = positions[index];
-            indicator.style.transform = 'translateX(-50%) scale(1.2)';
-            setTimeout(() => indicator.style.transform = 'translateX(-50%) scale(1)', 200);
-
-            navBtns.forEach(b => {
-                b.classList.remove('active', 'text-white');
-                b.classList.add('text-textSub');
-                b.querySelector('span').classList.remove('opacity-100');
-                b.querySelector('span').classList.add('opacity-0');
-                const icon = b.querySelector('i');
-                icon.className = icon.className.replace('ph-fill', 'ph');
-            });
-            
-            const targetBtn = document.querySelector(`[data-target="${targetId}"]`);
-            targetBtn.classList.add('active', 'text-white');
-            targetBtn.classList.remove('text-textSub');
-            targetBtn.querySelector('span').classList.remove('opacity-0');
-            targetBtn.querySelector('span').classList.add('opacity-100');
-            const activeIcon = targetBtn.querySelector('i');
-            activeIcon.className = activeIcon.className.replace('ph ', 'ph-fill ');
-
-            Object.values(views).forEach(view => view.classList.remove('active'));
-            const targetView = document.getElementById(targetId);
-            setTimeout(() => {
-                targetView.classList.add('active');
-                mainScroll.scrollTo({ top: 0, behavior: 'smooth' });
-            }, 50);
-        };
-
-        // Attaching click listeners to nav buttons
-        document.querySelectorAll('.nav-btn').forEach(btn => {
+        navBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const targetId = e.currentTarget.getAttribute('data-target');
-                const index = parseInt(e.currentTarget.getAttribute('data-index'));
-                window.switchTab(targetId, index);
+                const targetBtn = e.currentTarget;
+                const index = parseInt(targetBtn.getAttribute('data-index'));
+                
+                const positions = ['12.5%', '37.5%', '62.5%', '87.5%'];
+                indicator.style.left = positions[index];
+                indicator.style.transform = 'translateX(-50%) scale(1.2)';
+                setTimeout(() => indicator.style.transform = 'translateX(-50%) scale(1)', 200);
+
+                navBtns.forEach(b => {
+                    b.classList.remove('active', 'text-white');
+                    b.classList.add('text-textSub');
+                    b.querySelector('span').classList.remove('opacity-100');
+                    b.querySelector('span').classList.add('opacity-0');
+                    const icon = b.querySelector('i');
+                    icon.className = icon.className.replace('ph-fill', 'ph');
+                });
+                
+                targetBtn.classList.add('active', 'text-white');
+                targetBtn.classList.remove('text-textSub');
+                targetBtn.querySelector('span').classList.remove('opacity-0');
+                targetBtn.querySelector('span').classList.add('opacity-100');
+                const activeIcon = targetBtn.querySelector('i');
+                activeIcon.className = activeIcon.className.replace('ph ', 'ph-fill ');
+
+                const targetId = targetBtn.getAttribute('data-target');
+                Object.values(views).forEach(view => view.classList.remove('active'));
+                
+                const targetView = document.getElementById(targetId);
+                setTimeout(() => {
+                    targetView.classList.add('active');
+                    mainScroll.scrollTo({ top: 0, behavior: 'smooth' });
+                }, 50);
             });
         });
 
-        window.openHealthSync = function() {
-            const modal = document.getElementById('health-sheet');
-            modal.style.display = 'flex';
-            modal.classList.remove('hidden');
-            mainScroll.style.overflowY = 'hidden';
-        };
-
-        window.forceCloseModal = function() {
-            const modal = document.getElementById('health-sheet');
-            modal.style.display = 'none';
-            modal.classList.add('hidden');
-            mainScroll.style.overflowY = 'auto';
-        };
-
-        window.connectHealthApp = function(btn) {
-            btn.innerHTML = '✓ CONNECTED';
-            btn.className = 'px-5 py-2.5 rounded-xl bg-green-500/20 text-green-500 border border-green-500/30 text-[10px] font-bold tracking-widest uppercase cursor-default';
-            btn.onclick = null; 
-            window.showToast("App synchronized successfully!", "info");
-        };
-
+        // --- Toast Utility ---
+        const toastContainer = document.getElementById('toast-container');
         window.showToast = function(message, type = 'info') {
-            const toastContainer = document.getElementById('toast-container');
             const toast = document.createElement('div');
             const isError = type === 'error';
             const bg = isError ? 'bg-red-950/90 border-red-500/30' : 'glass border-primary/30';
             const icon = isError ? '<i class="ph-fill ph-warning-circle text-red-400"></i>' : '<i class="ph-fill ph-check-circle text-primary"></i>';
+            
             toast.className = `flex items-center gap-3 px-5 py-3 rounded-2xl border shadow-floating ${bg} transform translate-y-[-20px] opacity-0 transition-all duration-400 ease-out z-50`;
             toast.innerHTML = `${icon} <span class="text-sm font-medium text-white">${message}</span>`;
+            
             toastContainer.appendChild(toast);
-            requestAnimationFrame(() => { toast.style.transform = 'translateY(0)'; toast.style.opacity = '1'; });
+            
+            requestAnimationFrame(() => {
+                toast.style.transform = 'translateY(0)';
+                toast.style.opacity = '1';
+            });
+            
             setTimeout(() => {
-                toast.style.opacity = '0'; toast.style.transform = 'translateY(-20px) scale(0.95)';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px) scale(0.95)';
                 setTimeout(() => toast.remove(), 400);
-            }, 3000);
-        };
+            }, 4000);
+        }
 
-        // --- FORM STATE ---
-        document.getElementById('wo-duration').addEventListener('input', (e) => {
-            document.getElementById('duration-val').innerText = `${e.target.value} min`;
-        });
+        // --- Form Interactions ---
+        const durationSlider = document.getElementById('wo-duration');
+        const durationVal = document.getElementById('duration-val');
+        if(durationSlider) {
+            durationSlider.addEventListener('input', (e) => {
+                durationVal.innerText = `${e.target.value} min`;
+            });
+        }
 
         document.querySelectorAll('.exp-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -877,7 +895,7 @@
             });
         });
 
-        // --- AI WORKOUT GENERATION ---
+        // --- AI Workout Logic ---
         document.getElementById('reset-workout-btn').addEventListener('click', () => {
             document.getElementById('workout-result-container').classList.add('hidden');
             document.getElementById('workout-form-container').classList.remove('hidden');
@@ -885,7 +903,11 @@
         });
 
         document.getElementById('generate-workout-btn').addEventListener('click', async (e) => {
+            const key = requireApiKey();
+            if (!key) return;
+
             if (state.isGeneratingWorkout) return;
+            
             const age = document.getElementById('wo-age').value || 25;
             const weight = document.getElementById('wo-weight').value || 70;
             const equipment = document.getElementById('wo-equip').value;
@@ -896,42 +918,25 @@
             const originalHTML = btn.innerHTML;
             
             try {
-                // No manual API check needed, Canvas injects it automatically
                 state.isGeneratingWorkout = true;
                 btn.innerHTML = `<div class="loader-dots flex gap-1 mr-2"><div class="w-1.5 h-1.5 bg-black rounded-full"></div><div class="w-1.5 h-1.5 bg-black rounded-full"></div><div class="w-1.5 h-1.5 bg-black rounded-full"></div></div> <span class="font-bold text-white tracking-wide">Designing Routine...</span>`;
                 btn.disabled = true;
                 btn.classList.add('opacity-70', 'cursor-not-allowed');
 
-                const prompt = `Act as an elite, high-end personal trainer. Create a premium, structured workout routine that fits within exactly ${duration} minutes.
-                User profile: ${age} years old, ${weight}kg, ${state.currentLevel} experience.
-                Target Muscle Group: ${targetMuscle}. Primary Goal: ${state.currentGoal}. 
-                Equipment available: ${equipment}.
-                Return a JSON response following this exact schema:
-                {
-                    "type": "OBJECT",
-                    "properties": {
-                        "title": { "type": "STRING", "description": "Catchy, professional title" },
-                        "subtitle": { "type": "STRING", "description": "Short motivational subtitle" },
-                        "intensity": { "type": "STRING", "description": "Low, Medium, or High" },
-                        "estimatedCalories": { "type": "INTEGER" },
-                        "phases": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": {
-                            "phaseName": { "type": "STRING" },
-                            "exercises": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": {
-                                "name": { "type": "STRING" }, "setsReps": { "type": "STRING" }, "rest": { "type": "STRING" },
-                                "notes": { "type": "STRING" }, "execution": { "type": "ARRAY", "items": { "type": "STRING" } },
-                                "breathing": { "type": "STRING" }
-                            }}}
-                        }}}
-                    }
-                }`;
+                const prompt = `Act as an elite, high-end personal trainer. Create a premium, structured workout routine that fits within exactly ${duration} minutes. User profile: ${age} years old, ${weight}kg, ${state.currentLevel} experience. Target Muscle Group: ${targetMuscle}. Primary Goal: ${state.currentGoal}. Equipment available: ${equipment}. Return a JSON response following this exact schema: { "type": "OBJECT", "properties": { "title": { "type": "STRING" }, "subtitle": { "type": "STRING" }, "intensity": { "type": "STRING" }, "estimatedCalories": { "type": "INTEGER" }, "phases": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "phaseName": { "type": "STRING" }, "exercises": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "name": { "type": "STRING" }, "setsReps": { "type": "STRING" }, "rest": { "type": "STRING" }, "notes": { "type": "STRING" }, "execution": { "type": "ARRAY", "items": { "type": "STRING" } }, "breathing": { "type": "STRING" } } } } } } } } }`;
 
                 const payload = {
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: { responseMimeType: "application/json" }
                 };
 
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`;
-                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
                 if (!response.ok) throw new Error("API Error");
                 const result = await response.json();
@@ -968,7 +973,6 @@
                     <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
                     <h3 class="text-2xl font-black text-white mb-1 leading-tight">${data.title}</h3>
                     <p class="text-xs text-primary font-medium mb-6 uppercase tracking-widest">${data.subtitle}</p>
-                    
                     <div class="flex justify-center gap-4">
                         <div class="flex flex-col items-center">
                             <div class="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-1"><i class="ph-fill ph-clock text-white text-lg"></i></div>
@@ -983,50 +987,37 @@
                             <span class="text-[10px] font-bold ${iColor}">${intensityUpper}</span>
                         </div>
                     </div>
-                </div>`;
+                </div>
+            `;
 
             if(data.phases && data.phases.length > 0) {
                 html += `<div class="relative"><div class="absolute left-4 top-2 bottom-6 w-px bg-gradient-to-b from-primary via-secondary to-transparent opacity-30"></div>`;
                 data.phases.forEach((phase) => {
-                    html += `<div class="mb-8 relative pl-10">
-                        <div class="absolute left-[13px] top-1.5 w-2 h-2 rounded-full bg-primary shadow-[0_0_10px_#d4af37]"></div>
-                        <h4 class="text-xs font-bold text-white uppercase tracking-widest mb-4 flex items-center gap-2">${phase.phaseName}</h4>
-                        <div class="space-y-3">`;
-                    if(phase.exercises) {
+                    html += `<div class="mb-8 relative pl-10"><div class="absolute left-[13px] top-1.5 w-2 h-2 rounded-full bg-primary shadow-[0_0_10px_#d4af37]"></div><h4 class="text-xs font-bold text-white uppercase tracking-widest mb-4 flex items-center gap-2">${phase.phaseName}</h4><div class="space-y-3">`;
+                    if(phase.exercises && phase.exercises.length > 0) {
                         phase.exercises.forEach(ex => {
                             const exId = 'ex-' + Math.random().toString(36).substr(2, 9);
                             const executionSteps = (ex.execution || []).map(step => `<li>${step}</li>`).join('');
                             html += `
-                                <div class="glass-card p-4 hover:border-primary/50 transition-colors cursor-pointer group" onclick="window.toggleExercise('${exId}')">
+                                <div class="glass-card p-4 hover:border-primary/50 transition-colors cursor-pointer group" onclick="toggleExercise('${exId}')">
                                     <div class="flex justify-between items-start mb-2">
-                                        <div class="flex items-center gap-2">
-                                            <i class="ph-bold ph-caret-right text-primary transition-transform duration-300" id="icon-${exId}"></i>
-                                            <span class="text-sm font-bold text-white leading-tight pr-2">${ex.name}</span>
-                                        </div>
+                                        <div class="flex items-center gap-2"><i class="ph-bold ph-caret-right text-primary transition-transform duration-300" id="icon-${exId}"></i><span class="text-sm font-bold text-white leading-tight pr-2">${ex.name}</span></div>
                                         <span class="bg-primary/20 text-primary text-[10px] font-black px-2 py-1 rounded border border-primary/20 shrink-0 uppercase">${ex.setsReps}</span>
                                     </div>
                                     <div class="flex justify-between items-end mt-2">
                                         <p class="text-[11px] text-textSub font-medium flex-1 mr-2 leading-snug truncate"><span class="text-secondary font-bold">TIP:</span> ${ex.notes}</p>
                                         <span class="text-[10px] font-bold text-white bg-white/10 px-2 py-1 rounded shrink-0 flex items-center gap-1"><i class="ph-bold ph-hourglass-simple text-secondary"></i> ${ex.rest}</span>
                                     </div>
-                                    
                                     <div id="content-${exId}" class="max-h-0 overflow-hidden transition-all duration-500 ease-in-out opacity-0">
                                         <div class="pt-4 mt-4 border-t border-white/10 space-y-3">
-                                            <div>
-                                                <h5 class="text-[10px] font-bold text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1"><i class="ph-bold ph-target"></i> Execution</h5>
-                                                <ol class="list-decimal list-inside text-xs text-textSub space-y-1 ml-1">${executionSteps}</ol>
-                                            </div>
-                                            <div>
-                                                <h5 class="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1.5 flex items-center gap-1"><i class="ph-bold ph-wind"></i> Breathing</h5>
-                                                <p class="text-xs text-textSub ml-1">${ex.breathing || 'Breathe rhythmically.'}</p>
-                                            </div>
-                                            <button onclick="event.stopPropagation(); window.visualizeExercise('${ex.name.replace(/'/g, "\\'").replace(/"/g, '&quot;')}', 'vis-${exId}', this)" class="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-white hover:bg-white/10 hover:border-primary/50 transition-all flex items-center justify-center gap-2 mt-4 active:scale-95">
-                                                <i class="ph-bold ph-image text-primary"></i> Visualize Motion
-                                            </button>
+                                            <div><h5 class="text-[10px] font-bold text-secondary uppercase tracking-widest mb-1.5 flex items-center gap-1"><i class="ph-bold ph-target"></i> Execution</h5><ol class="list-decimal list-inside text-xs text-textSub space-y-1 ml-1">${executionSteps}</ol></div>
+                                            <div><h5 class="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1.5 flex items-center gap-1"><i class="ph-bold ph-wind"></i> Breathing</h5><p class="text-xs text-textSub ml-1">${ex.breathing || 'Breathe rhythmically.'}</p></div>
+                                            <button onclick="event.stopPropagation(); visualizeExercise('${ex.name.replace(/'/g, "\\'").replace(/"/g, '&quot;')}', 'vis-${exId}', this)" class="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-white hover:bg-white/10 hover:border-primary/50 transition-all flex items-center justify-center gap-2 mt-4 active:scale-95"><i class="ph-bold ph-image text-primary"></i> Visualize Motion</button>
                                             <div id="vis-${exId}" class="hidden w-full h-40 rounded-xl overflow-hidden mt-3 relative border border-white/10"></div>
                                         </div>
                                     </div>
-                                </div>`;
+                                </div>
+                            `;
                         });
                     }
                     html += `</div></div>`;
@@ -1037,44 +1028,7 @@
             content.innerHTML = html;
         }
 
-        window.toggleExercise = function(id) {
-            const content = document.getElementById(`content-${id}`);
-            const icon = document.getElementById(`icon-${id}`);
-            if (content.classList.contains('max-h-0')) {
-                content.classList.remove('max-h-0', 'opacity-0'); content.classList.add('max-h-[800px]', 'opacity-100'); icon.classList.add('rotate-90');
-            } else {
-                content.classList.add('max-h-0', 'opacity-0'); content.classList.remove('max-h-[800px]', 'opacity-100'); icon.classList.remove('rotate-90');
-            }
-        };
-
-        window.visualizeExercise = async function(exerciseName, containerId, btnEl) {
-            const container = document.getElementById(containerId);
-            container.classList.remove('hidden'); btnEl.classList.add('hidden');
-            container.innerHTML = `<div class="absolute inset-0 skeleton-dark flex flex-col items-center justify-center gap-2"><div class="loader-dots flex gap-1"><div class="w-2 h-2 bg-primary rounded-full"></div><div class="w-2 h-2 bg-primary rounded-full"></div><div class="w-2 h-2 bg-primary rounded-full"></div></div><span class="text-[9px] text-primary uppercase font-bold tracking-widest">Generating Visual</span></div>`;
-
-            try {
-                const imagePrompt = `Sleek, dark, futuristic glowing wireframe 3D illustration of a fitness model performing the exercise: ${exerciseName}. The targeted muscles should be glowing bright red or gold. The background is pure black studio lighting. High-end fitness app aesthetic, professional anatomical visualization.`;
-                const imagePayload = { contents: [{ role: 'user', parts: [{ text: imagePrompt }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: "16:9" } } };
-                const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key=${API_KEY}`;
-                
-                const imgRes = await fetch(imageApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(imagePayload) });
-                if (!imgRes.ok) throw new Error("Image generation failed");
-                const imgResult = await imgRes.json();
-                
-                const base64Data = imgResult?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-                const mimeType = imgResult?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.mimeType || 'image/jpeg';
-                
-                if (base64Data) {
-                    container.innerHTML = `<img src="data:${mimeType};base64,${base64Data}" alt="${exerciseName}" class="w-full h-full object-cover animate-[fadeIn_0.5s_ease-out]">`;
-                } else { throw new Error("No image data"); }
-            } catch (error) {
-                console.error("Visualization error:", error);
-                container.innerHTML = `<div class="w-full h-full bg-red-500/10 flex items-center justify-center text-[10px] text-red-400 font-bold p-4 text-center border border-red-500/20"><i class="ph-bold ph-warning-circle mr-2"></i> Visual currently unavailable.</div>`;
-                setTimeout(() => { btnEl.classList.remove('hidden'); container.classList.add('hidden'); }, 3000);
-            }
-        };
-
-        // --- AI MEALS GENERATION ---
+        // --- Smart Meals Logic ---
         document.getElementById('reset-meal-btn').addEventListener('click', () => {
             document.getElementById('meal-result-container').classList.add('hidden');
             document.getElementById('meal-form-container').classList.remove('hidden');
@@ -1085,7 +1039,11 @@
         });
 
         document.getElementById('generate-meal-btn').addEventListener('click', async (e) => {
+            const key = requireApiKey();
+            if (!key) return;
+
             if (state.isGeneratingMeal) return;
+            
             const mealType = document.getElementById('ml-type').value;
             const macroFocus = document.getElementById('ml-focus').value;
             const cuisine = document.getElementById('ml-cuisine').value;
@@ -1097,30 +1055,31 @@
             try {
                 state.isGeneratingMeal = true;
                 btn.innerHTML = `<div class="loader-dots flex gap-1 mr-2"><div class="w-1.5 h-1.5 bg-white rounded-full"></div><div class="w-1.5 h-1.5 bg-white rounded-full"></div><div class="w-1.5 h-1.5 bg-white rounded-full"></div></div> <span class="font-bold text-white tracking-wide">Designing Dish...</span>`;
-                btn.disabled = true; btn.classList.add('opacity-70', 'cursor-not-allowed');
+                btn.disabled = true;
+                btn.classList.add('opacity-70', 'cursor-not-allowed');
 
-                const recipePrompt = `You are a private executive chef. Create a highly premium, gourmet ${state.currentDiet} recipe.
-                Cuisine Style: ${cuisine}. Meal type: ${mealType}. Macro focus: ${macroFocus}. Exclude: ${exclude}.
-                Ensure the recipe is healthy but sounds like it belongs in a Michelin-star restaurant.
-                Return a JSON response following this schema:
-                {
-                    "type": "OBJECT", "properties": {
-                        "recipeName": { "type": "STRING" }, "description": { "type": "STRING" }, "prepTime": { "type": "STRING" },
-                        "ingredients": { "type": "ARRAY", "items": { "type": "STRING" } }, "instructions": { "type": "ARRAY", "items": { "type": "STRING" } },
-                        "calories": { "type": "INTEGER" }, "protein": { "type": "INTEGER" }, "carbs": { "type": "INTEGER" }
-                    }
-                }`;
+                const recipePrompt = `You are a private executive chef. Create a highly premium, gourmet ${state.currentDiet} recipe. Cuisine Style: ${cuisine}. Meal type: ${mealType}. Macro focus: ${macroFocus}. Exclude: ${exclude}. Ensure the recipe is healthy but sounds like it belongs in a Michelin-star restaurant. Return a JSON response following this schema: { "type": "OBJECT", "properties": { "recipeName": { "type": "STRING" }, "description": { "type": "STRING" }, "prepTime": { "type": "STRING" }, "ingredients": { "type": "ARRAY", "items": { "type": "STRING" } }, "instructions": { "type": "ARRAY", "items": { "type": "STRING" } }, "calories": { "type": "INTEGER" }, "protein": { "type": "INTEGER" }, "carbs": { "type": "INTEGER" } } }`;
 
-                const textPayload = { contents: [{ parts: [{ text: recipePrompt }] }], generationConfig: { responseMimeType: "application/json" } };
-                const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`;
+                const textPayload = {
+                    contents: [{ parts: [{ text: recipePrompt }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+
+                const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`;
                 
-                const recipeRes = await fetch(textApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(textPayload) });
+                const recipeRes = await fetch(textApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(textPayload)
+                });
+
                 if (!recipeRes.ok) throw new Error("Failed to fetch recipe");
                 const recipeResult = await recipeRes.json();
                 const recipeData = JSON.parse(recipeResult.candidates[0].content.parts[0].text);
 
                 document.getElementById('meal-form-container').classList.add('hidden');
-                document.getElementById('meal-result-container').classList.remove('hidden');
+                const resultContainer = document.getElementById('meal-result-container');
+                resultContainer.classList.remove('hidden');
                 mainScroll.scrollTo({ top: 0, behavior: 'smooth' });
 
                 document.getElementById('meal-title').innerText = recipeData.recipeName;
@@ -1131,34 +1090,44 @@
                 document.getElementById('meal-protein').innerText = `${recipeData.protein}g`;
                 document.getElementById('meal-carbs').innerText = `${recipeData.carbs}g`;
                 
-                document.getElementById('meal-ingredients').innerHTML = recipeData.ingredients.map(i => `
-                    <li class="flex items-start gap-3 text-sm text-white font-medium">
-                        <div class="w-1 h-1 rounded-full bg-secondary mt-2 shrink-0"></div>${i}
-                    </li>`).join('');
+                const ingUl = document.getElementById('meal-ingredients');
+                ingUl.innerHTML = recipeData.ingredients.map(i => `<li class="flex items-start gap-3 text-sm text-white font-medium"><div class="w-1 h-1 rounded-full bg-secondary mt-2 shrink-0"></div>${i}</li>`).join('');
                 
-                document.getElementById('meal-instructions').innerHTML = recipeData.instructions.map((step, idx) => `
-                    <li class="flex gap-4 group">
-                        <span class="text-xs font-black text-accent mt-0.5 shrink-0 w-4">${idx+1}.</span>
-                        <p class="text-sm text-textSub leading-relaxed group-hover:text-white transition-colors">${step}</p>
-                    </li>`).join('');
+                const instOl = document.getElementById('meal-instructions');
+                instOl.innerHTML = recipeData.instructions.map((step, idx) => `<li class="flex gap-4 group"><span class="text-xs font-black text-accent mt-0.5 shrink-0 w-4">${idx+1}.</span><p class="text-sm text-textSub leading-relaxed group-hover:text-white transition-colors">${step}</p></li>`).join('');
 
-                window.generateMealImage(recipeData.recipeName, recipeData.description);
+                generateMealImage(recipeData.recipeName, recipeData.description, key);
+
             } catch (error) {
-                console.error(error); window.showToast("Failed to craft recipe. Try again.", "error");
+                console.error(error);
+                window.showToast("Failed to craft recipe. Try again.", "error");
                 document.getElementById('meal-form-container').classList.remove('hidden');
                 document.getElementById('meal-result-container').classList.add('hidden');
             } finally {
-                state.isGeneratingMeal = false; btn.innerHTML = originalHTML; btn.disabled = false; btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                state.isGeneratingMeal = false;
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+                btn.classList.remove('opacity-70', 'cursor-not-allowed');
             }
         });
 
-        window.generateMealImage = async function(recipeName, description) {
+        async function generateMealImage(recipeName, description, key) {
             try {
                 const imagePrompt = `Hyper-realistic, 8k resolution macro food photography of ${recipeName}. ${description}. Plated on a matte black ceramic dish, dramatic chiaroscuro studio lighting, Michelin star presentation, shallow depth of field, dark background, accented with gold flakes or rich red spices.`;
-                const imagePayload = { contents: [{ role: 'user', parts: [{ text: imagePrompt }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: "4:3" } } };
-                const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key=${API_KEY}`;
                 
-                const imgRes = await fetch(imageApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(imagePayload) });
+                const imagePayload = {
+                    contents: [{ role: 'user', parts: [{ text: imagePrompt }] }],
+                    generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: "4:3" } }
+                };
+
+                const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key=${key}`;
+                
+                const imgRes = await fetch(imageApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(imagePayload)
+                });
+
                 if (!imgRes.ok) throw new Error("Image generation failed");
                 const imgResult = await imgRes.json();
                 
@@ -1168,17 +1137,25 @@
                 if (base64Data) {
                     const imgEl = document.getElementById('meal-generated-image');
                     imgEl.src = `data:${mimeType};base64,${base64Data}`;
-                    imgEl.onload = () => { document.getElementById('meal-image-skeleton').classList.add('hidden'); imgEl.classList.add('opacity-100'); };
-                } else { throw new Error("No image data returned"); }
+                    imgEl.onload = () => {
+                        document.getElementById('meal-image-skeleton').classList.add('hidden');
+                        imgEl.classList.add('opacity-100');
+                    };
+                } else {
+                    throw new Error("No image data returned");
+                }
             } catch (error) {
                 console.error("Image gen error:", error);
                 const imgEl = document.getElementById('meal-generated-image');
                 imgEl.src = `https://placehold.co/800x600/121217/d4af37?text=Bon+Appetit`;
-                imgEl.onload = () => { document.getElementById('meal-image-skeleton').classList.add('hidden'); imgEl.classList.add('opacity-100'); };
+                imgEl.onload = () => {
+                    document.getElementById('meal-image-skeleton').classList.add('hidden');
+                    imgEl.classList.add('opacity-100');
+                };
             }
-        };
+        }
 
-        // --- AI COACH GENERATION ---
+        // --- AI Coach Logic ---
         document.getElementById('reset-coach-btn').addEventListener('click', () => {
             document.getElementById('coach-result-container').classList.add('hidden');
             document.getElementById('coach-form-container').classList.remove('hidden');
@@ -1186,7 +1163,11 @@
         });
 
         document.getElementById('generate-coach-btn').addEventListener('click', async (e) => {
+            const key = requireApiKey();
+            if (!key) return;
+
             if (state.isGeneratingCoach) return;
+            
             const focus = document.getElementById('co-focus').value;
             const btn = e.currentTarget;
             const originalHTML = btn.innerHTML;
@@ -1194,37 +1175,42 @@
             try {
                 state.isGeneratingCoach = true;
                 btn.innerHTML = `<div class="loader-dots flex gap-1 mr-2"><div class="w-1.5 h-1.5 bg-black rounded-full"></div><div class="w-1.5 h-1.5 bg-black rounded-full"></div><div class="w-1.5 h-1.5 bg-black rounded-full"></div></div> <span class="font-bold text-white tracking-wide">Drafting Master Plan...</span>`;
-                btn.disabled = true; btn.classList.add('opacity-70', 'cursor-not-allowed');
+                btn.disabled = true;
+                btn.classList.add('opacity-70', 'cursor-not-allowed');
 
-                const prompt = `Act as an elite holistic health coach. Generate a complete 1-day master schedule combining fitness, nutrition, and lifestyle.
-                User Diet: ${state.currentDiet}. Today's Focus: ${focus}.
-                Return a JSON response following this exact schema:
-                {
-                    "type": "OBJECT", "properties": {
-                        "dailyMantra": { "type": "STRING" },
-                        "schedule": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": {
-                            "time": { "type": "STRING" }, "title": { "type": "STRING" }, "description": { "type": "STRING" }, "type": { "type": "STRING" }
-                        }}}
-                    }
-                }`;
+                const prompt = `Act as an elite holistic health coach. Generate a complete 1-day master schedule combining fitness, nutrition, and lifestyle. User Diet: ${state.currentDiet}. Today's Focus: ${focus}. Return a JSON response following this exact schema: { "type": "OBJECT", "properties": { "dailyMantra": { "type": "STRING" }, "schedule": { "type": "ARRAY", "items": { "type": "OBJECT", "properties": { "time": { "type": "STRING" }, "title": { "type": "STRING" }, "description": { "type": "STRING" }, "type": { "type": "STRING", "description": "Must be exactly one of: 'Meal', 'Workout', 'Recovery'" } } } } } }`;
 
-                const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } };
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`;
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${key}`;
                 
-                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
                 if (!response.ok) throw new Error("API Error");
                 const result = await response.json();
                 const data = JSON.parse(result.candidates[0].content.parts[0].text);
 
-                window.renderCoachPlan(data);
+                renderCoachPlan(data);
+
             } catch (error) {
-                console.error(error); window.showToast("Failed to generate coach plan.", "error");
+                console.error(error);
+                window.showToast("Failed to generate coach plan. Please try again.", "error");
             } finally {
-                state.isGeneratingCoach = false; btn.innerHTML = originalHTML; btn.disabled = false; btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                state.isGeneratingCoach = false;
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+                btn.classList.remove('opacity-70', 'cursor-not-allowed');
             }
         });
 
-        window.renderCoachPlan = function(data) {
+        function renderCoachPlan(data) {
             document.getElementById('coach-form-container').classList.add('hidden');
             const resultContainer = document.getElementById('coach-result-container');
             const content = document.getElementById('coach-content');
@@ -1237,7 +1223,8 @@
                     <i class="ph-fill ph-quotes text-3xl text-secondary/50 mb-2"></i>
                     <p class="text-lg font-bold text-white leading-relaxed">"${data.dailyMantra}"</p>
                 </div>
-                <div class="relative pl-6"><div class="absolute left-[11px] top-2 bottom-6 w-px bg-white/10"></div>
+                <div class="relative pl-6">
+                    <div class="absolute left-[11px] top-2 bottom-6 w-px bg-white/10"></div>
             `;
 
             data.schedule.forEach(item => {
@@ -1248,16 +1235,88 @@
 
                 html += `
                     <div class="mb-8 relative">
-                        <div class="absolute -left-6 top-0 w-6 h-6 rounded-full ${iconBg} flex items-center justify-center shadow-lg border border-white/5"><i class="ph-fill ${icon} ${iconColor} text-[10px]"></i></div>
+                        <div class="absolute -left-6 top-0 w-6 h-6 rounded-full ${iconBg} flex items-center justify-center shadow-lg border border-white/5">
+                            <i class="ph-fill ${icon} ${iconColor} text-[10px]"></i>
+                        </div>
                         <div class="glass-card p-4 ml-4">
                             <span class="text-[10px] font-bold ${iconColor} tracking-widest uppercase mb-1 block">${item.time}</span>
                             <h4 class="text-sm font-bold text-white mb-2">${item.title}</h4>
                             <p class="text-xs text-textSub leading-relaxed">${item.description}</p>
                         </div>
-                    </div>`;
+                    </div>
+                `;
             });
+
             html += `</div><div class="h-8"></div>`;
             content.innerHTML = html;
+        }
+
+        // --- Interactive Exercise Logic ---
+        window.toggleExercise = function(id) {
+            const content = document.getElementById(`content-${id}`);
+            const icon = document.getElementById(`icon-${id}`);
+            
+            if (content.classList.contains('max-h-0')) {
+                content.classList.remove('max-h-0', 'opacity-0');
+                content.classList.add('max-h-[800px]', 'opacity-100');
+                icon.classList.add('rotate-90');
+            } else {
+                content.classList.add('max-h-0', 'opacity-0');
+                content.classList.remove('max-h-[800px]', 'opacity-100');
+                icon.classList.remove('rotate-90');
+            }
+        };
+
+        window.visualizeExercise = async function(exerciseName, containerId, btnEl) {
+            const key = requireApiKey();
+            if (!key) return;
+
+            const container = document.getElementById(containerId);
+            container.classList.remove('hidden');
+            btnEl.classList.add('hidden');
+            
+            container.innerHTML = `
+                <div class="absolute inset-0 skeleton-dark flex flex-col items-center justify-center gap-2">
+                    <div class="loader-dots flex gap-1"><div class="w-2 h-2 bg-primary rounded-full"></div><div class="w-2 h-2 bg-primary rounded-full"></div><div class="w-2 h-2 bg-primary rounded-full"></div></div>
+                    <span class="text-[9px] text-primary uppercase font-bold tracking-widest">Generating Visual</span>
+                </div>
+            `;
+
+            try {
+                const imagePrompt = `Sleek, dark, futuristic glowing wireframe 3D illustration of a fitness model performing the exercise: ${exerciseName}. The targeted muscles should be glowing bright red or gold. The background is pure black studio lighting. High-end fitness app aesthetic, professional anatomical visualization.`;
+                
+                const imagePayload = {
+                    contents: [{ role: 'user', parts: [{ text: imagePrompt }] }],
+                    generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: "16:9" } }
+                };
+
+                const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent?key=${key}`;
+                
+                const imgRes = await fetch(imageApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(imagePayload)
+                });
+
+                if (!imgRes.ok) throw new Error("Image generation failed");
+                const imgResult = await imgRes.json();
+                
+                const base64Data = imgResult?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                const mimeType = imgResult?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.mimeType || 'image/jpeg';
+                
+                if (base64Data) {
+                    container.innerHTML = `<img src="data:${mimeType};base64,${base64Data}" alt="${exerciseName}" class="w-full h-full object-cover animate-[fadeIn_0.5s_ease-out]">`;
+                } else {
+                    throw new Error("No image data");
+                }
+            } catch (error) {
+                console.error("Visualization error:", error);
+                container.innerHTML = `<div class="w-full h-full bg-red-500/10 flex items-center justify-center text-[10px] text-red-400 font-bold p-4 text-center border border-red-500/20"><i class="ph-bold ph-warning-circle mr-2"></i> Visual currently unavailable.</div>`;
+                setTimeout(() => {
+                    btnEl.classList.remove('hidden');
+                    container.classList.add('hidden');
+                }, 3000);
+            }
         };
     </script>
 </body>
