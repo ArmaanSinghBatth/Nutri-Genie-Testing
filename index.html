@@ -179,9 +179,8 @@
                         <h1 class="text-base font-bold text-white" id="user-name">Armaan Singh</h1>
                     </div>
                 </div>
-                <button class="w-10 h-10 rounded-full glass border border-white/10 flex items-center justify-center relative hover:bg-white/5 transition cursor-pointer">
-                    <i class="ph ph-bell text-lg text-white"></i>
-                    <span class="absolute top-2 right-2.5 w-2 h-2 bg-accent rounded-full border border-appBg"></span>
+                <button onclick="handleLogout()" class="w-10 h-10 rounded-full border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-500/10 transition cursor-pointer">
+                    <i class="ph-bold ph-power text-lg"></i>
                 </button>
             </header>
 
@@ -569,7 +568,7 @@
                         <div class="font-bold text-white">System Admin</div>
                     </div>
                 </div>
-                <button onclick="location.reload()" class="w-10 h-10 rounded-full border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-500/10 cursor-pointer">
+                <button onclick="handleLogout()" class="w-10 h-10 rounded-full border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-500/10 cursor-pointer">
                     <i class="ph-bold ph-power text-lg"></i>
                 </button>
             </header>
@@ -628,7 +627,7 @@
     <!-- 5. JAVASCRIPT & FIREBASE LOGIC -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
         // Firebase Setup
         const firebaseConfig = {
@@ -708,6 +707,31 @@
 
         window.bypassLogin = function(role) {
             window.enterApp(role === 'admin' ? "Admin" : "Demo User", role === 'admin' ? "admin@nutrigenie.com" : "demo@user.com");
+        };
+
+        window.handleLogout = async function() {
+            try {
+                if (auth.currentUser) {
+                    await signOut(auth);
+                }
+                // Hide main apps
+                document.getElementById('main-app').style.display = 'none';
+                document.getElementById('main-app').classList.add('hidden');
+                document.getElementById('admin-app').style.display = 'none';
+                document.getElementById('admin-app').classList.add('hidden');
+                
+                // Show Auth Screen
+                document.getElementById('auth-screen').style.display = 'flex';
+                
+                // Clear inputs
+                document.getElementById('auth-email').value = '';
+                document.getElementById('auth-password').value = '';
+                
+                window.showToast("Logged out successfully", "info");
+            } catch (error) {
+                console.error("Logout Error:", error);
+                window.showToast("Error logging out.", "error");
+            }
         };
 
         window.enterApp = function(name, email = "") {
